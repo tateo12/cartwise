@@ -1,0 +1,32 @@
+# Fly.io config for Cartwise.
+#
+# A single small machine with a persistent volume, because the database is
+# SQLite on disk. This is exactly why Fly was chosen over Vercel: a serverless
+# filesystem is ephemeral, so a deploy there would silently erase your basket,
+# receipts and pinned matches on every push.
+
+app = "cartwise"
+primary_region = "den"   # Denver: closest region to Salt Lake City
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  CARTWISE_DB = "/data/cartwise.db"
+
+# SQLite requires exactly one writer, so never scale this past one machine.
+[[mounts]]
+  source = "cartwise_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Zero is deliberate: this is a personal app, let it sleep when unused.
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

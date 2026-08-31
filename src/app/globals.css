@@ -1,0 +1,98 @@
+@import 'tailwindcss';
+
+/*
+ * Cartwise visual system.
+ *
+ * Deliberately not the default zinc/blue dashboard look: the ground is a deep
+ * near-black with a green cast, savings are the only saturated colour on the
+ * page, and every monetary figure uses tabular numerals so columns of prices
+ * align to the cent.
+ */
+@theme {
+  --color-ink: #050806;
+  --color-base: #090e0b;
+  --color-surface: #0f1613;
+  --color-raised: #141d19;
+  --color-line: #1d2a25;
+  --color-line-bright: #2a3a33;
+
+  --color-accent: #34d399;
+  --color-accent-dim: #10b981;
+  --color-warn: #fbbf24;
+  --color-danger: #fb7185;
+  --color-info: #38bdf8;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-base);
+  color: #e8efeb;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every price, total and delta. Keeps digit columns from dancing. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* Small uppercase section label. */
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #6b7f77;
+}
+
+/* Card surface with a top inner highlight, so panels read as lit from above. */
+.panel {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 0.875rem;
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.035),
+    0 1px 2px 0 rgb(0 0 0 / 0.4);
+}
+
+/* The one heavily-styled element on the page: the headline answer. */
+.hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgb(52 211 153 / 0.13) 0%, transparent 55%),
+    linear-gradient(180deg, #101a16 0%, #0d1411 100%);
+  border: 1px solid #24352e;
+  border-radius: 1.125rem;
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.06);
+  border-radius: inherit;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgb(52 211 153 / 0.28);
+}
+
+/* Wide tables scroll inside their own container, never the page body. */
+.scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}

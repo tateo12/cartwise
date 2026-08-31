@@ -1,0 +1,11 @@
+node_modules
+.next
+# SQLite plus its sidecars. The -wal file holds recent writes, so leaving it
+# untracked matters: it would otherwise leak basket and receipt data.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env.local
+next-env.d.ts
+tsconfig.tsbuildinfo
