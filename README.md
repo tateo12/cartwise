@@ -167,6 +167,33 @@ than silently dropped. Hit **Refresh live prices** on My stores first.
 
 No other chain has a usable cart API. Walmart, Target and Costco are link-only.
 
+## Hosting it on your own machine (recommended)
+
+Best of both: always available on your phone, completely private, and it keeps
+live prices and cart push because it is a real server.
+
+Run this **on the machine that will host it**, not from another computer:
+
+```bash
+# macOS (e.g. a Mac mini)
+curl -fsSL https://raw.githubusercontent.com/tateo12/cartwise/main/scripts/host-on-mac.sh | bash
+```
+
+```powershell
+# Windows
+irm https://raw.githubusercontent.com/tateo12/cartwise/main/scripts/host-on-windows.ps1 | iex
+```
+
+Each script installs bun if needed, clones and builds, starts the server, and
+then runs `tailscale serve --bg 3000`. That last step is the good part: it gives
+you a real HTTPS certificate and a stable hostname like
+`https://passs-mac-mini.your-tailnet.ts.net`, with **nothing exposed to the
+public internet**. Only your own devices can reach it, so there is no login to
+add.
+
+Requires Node 24 or newer on the host, because the database is `node:sqlite`, a
+Node 24 built-in.
+
 ## Deploying
 
 The code lives on GitHub; the app needs a host that runs Node.
