@@ -9,13 +9,15 @@ $Repo = 'https://github.com/tateo12/cartwise.git'
 $Dir  = Join-Path $HOME 'cartwise'
 
 Write-Host '==> Checking prerequisites'
-# node:sqlite is a Node 24 built-in, so 24 is a hard floor, not a preference.
-$nodeMajor = 0
+# The database is `node:sqlite`, added in Node 22.5.0. That is the real floor.
+$nodeOk = $false
 if (Get-Command node -ErrorAction SilentlyContinue) {
-  $nodeMajor = [int]((node -v).TrimStart('v').Split('.')[0])
+  $parts = (node -v).TrimStart('v').Split('.')
+  $major = [int]$parts[0]; $minor = [int]$parts[1]
+  $nodeOk = ($major -gt 22) -or ($major -eq 22 -and $minor -ge 5)
 }
-if ($nodeMajor -lt 24) {
-  Write-Host '    Node 24+ required. Install with: winget install OpenJS.NodeJS'
+if (-not $nodeOk) {
+  Write-Host '    Node 22.5+ required. Install with: winget install OpenJS.NodeJS'
   exit 1
 }
 if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {

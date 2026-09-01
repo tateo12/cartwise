@@ -1,9 +1,10 @@
 # Cartwise container.
 #
 # Two stages: Bun installs and builds (it is the package manager this repo uses),
-# Node 24 runs. Node 24 specifically, because the database is `node:sqlite`, a
-# built-in added in Node 22.5 — there is no native module to compile, which is
-# why this image needs no build toolchain at runtime.
+# Node runs. The floor is Node 22.5, where `node:sqlite` landed; 24 is pinned
+# here simply because the image is free to use a newer runtime than a host might
+# have. Either way there is no native module to compile, which is why this image
+# needs no build toolchain at runtime.
 
 FROM oven/bun:1 AS builder
 WORKDIR /app

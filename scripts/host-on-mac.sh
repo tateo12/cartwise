@@ -10,9 +10,22 @@ REPO="https://github.com/tateo12/cartwise.git"
 DIR="$HOME/cartwise"
 
 echo "==> Checking prerequisites"
-# node:sqlite is a Node 24 built-in, so 24 is a hard floor, not a preference.
-if ! command -v node >/dev/null || [ "$(node -v | cut -c2- | cut -d. -f1)" -lt 24 ]; then
-  echo "    Node 24+ required. Install with: brew install node"
+# The database is `node:sqlite`, added in Node 22.5.0. That is the real floor.
+# It matters on older Macs: Node 24's prebuilt binaries need macOS 13.5+, while
+# Node 22 supports macOS 11+, so Monterey hosts should install 22 rather than 24.
+node_ok=0
+if command -v node >/dev/null; then
+  ver=$(node -v | cut -c2-)
+  major=$(echo "$ver" | cut -d. -f1)
+  minor=$(echo "$ver" | cut -d. -f2)
+  if [ "$major" -gt 22 ] || { [ "$major" -eq 22 ] && [ "$minor" -ge 5 ]; }; then node_ok=1; fi
+fi
+if [ "$node_ok" -ne 1 ]; then
+  echo "    Node 22.5+ required (found: $(node -v 2>/dev/null || echo none))."
+  echo "    On macOS 13.5 or newer: install Node 24 from https://nodejs.org"
+  echo "    On macOS 12 or older:   install Node 22 LTS from https://nodejs.org/en/download"
+  echo "    Do NOT use 'brew install node' on older macOS: with no bottle available"
+  echo "    it compiles node, llvm and cmake from source, which takes hours."
   exit 1
 fi
 command -v bun >/dev/null || { echo "    Installing bun"; curl -fsSL https://bun.sh/install | bash; export PATH="$HOME/.bun/bin:$PATH"; }

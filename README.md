@@ -191,8 +191,17 @@ you a real HTTPS certificate and a stable hostname like
 public internet**. Only your own devices can reach it, so there is no login to
 add.
 
-Requires Node 24 or newer on the host, because the database is `node:sqlite`, a
-Node 24 built-in.
+Requires **Node 22.5 or newer** on the host, because the database is
+`node:sqlite`, which landed in Node 22.5.0.
+
+That minor version matters on older Macs. Node 24's prebuilt binaries need
+macOS 13.5+, but Node 22 supports macOS 11+, so a Mac on Monterey should install
+**Node 22 LTS** and works fine.
+
+Avoid `brew install node` on an older macOS. Homebrew has no bottle for
+unsupported OS versions, so it compiles node, llvm and cmake from source, which
+takes hours and may fail. Use the installer from
+[nodejs.org](https://nodejs.org/en/download) instead.
 
 ## Deploying
 
