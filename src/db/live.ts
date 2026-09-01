@@ -33,11 +33,37 @@ export interface RefreshReport {
   updated: number;
   /** Products the provider could not price — these KEEP their seeded offer. */
   missed: number;
+  /** Offers already fresh enough to skip. */
+  reused: number;
   errors: string[];
 }
 
-function productsForChain(chainId: string): Product[] {
-  return all<ProductRow>('select * from products where chain_id = ?', chainId).map((row) => ({
+/**
+ * How long a live price stays good.
+ *
+ * Grocery prices move on promo cycles, not minutes, so re-fetching the same
+ * item repeatedly buys nothing and spends request budget that some retailers
+ * ration tightly.
+ */
+const FRESH_FOR_MINUTES = 90;
+
+/**
+ * Products for one chain, optionally narrowed to specific Items.
+ *
+ * Narrowing is the point: pricing a 14-line basket at 4 stores is ~56 requests,
+ * where refreshing the whole catalog everywhere is ~480. Fetching prices nobody
+ * asked for is both slower for the user and harder to justify to the retailer.
+ */
+function productsForChain(chainId: string, itemIds?: string[]): Product[] {
+  const rows =
+    itemIds && itemIds.length > 0
+      ? all<ProductRow>(
+          `select * from products where chain_id = ? and item_id in (${itemIds.map(() => '?').join(',')})`,
+          chainId,
+          ...itemIds,
+        )
+      : all<ProductRow>('select * from products where chain_id = ?', chainId);
+  return rows.map((row) => ({
     id: row.id,
     itemId: row.item_id,
     chainId: row.chain_id,
@@ -50,6 +76,26 @@ function productsForChain(chainId: string): Product[] {
     upc: row.upc ?? undefined,
     confidence: row.confidence as Product['confidence'],
   }));
+}
+
+/**
+ * Product ids whose live offer is still within the freshness window.
+ *
+ * Re-asking for a price that has not moved wastes the request budget, which
+ * matters most at exactly the retailers that ration it hardest.
+ */
+function stillFresh(storeId: string, productIds: string[]): Set<string> {
+  if (productIds.length === 0) return new Set();
+  const cutoff = new Date(Date.now() - FRESH_FOR_MINUTES * 60_000).toISOString();
+  const rows = all<{ product_id: string }>(
+    `select product_id from offers
+     where store_id = ? and provenance = 'live' and fetched_at > ?
+       and product_id in (${productIds.map(() => '?').join(',')})`,
+    storeId,
+    cutoff,
+    ...productIds,
+  );
+  return new Set(rows.map((row) => row.product_id));
 }
 
 /** Today's date in the same YYYY-MM-DD form price_history uses. */
@@ -110,9 +156,14 @@ function writeOffers(offers: Offer[]): void {
  * being deleted or zeroed — a missing live price is not evidence the store
  * stopped carrying the item.
  */
-export async function refreshLiveOffers(): Promise<RefreshReport> {
+export async function refreshLiveOffers(options?: {
+  /** Limit to these Items. Omit to refresh everything (rarely what you want). */
+  itemIds?: string[];
+  /** Limit to these Stores. Omit for all live-capable stores. */
+  storeIds?: string[];
+}): Promise<RefreshReport> {
   ensureSeeded();
-  const report: RefreshReport = { attemptedStores: 0, updated: 0, missed: 0, errors: [] };
+  const report: RefreshReport = { attemptedStores: 0, updated: 0, missed: 0, reused: 0, errors: [] };
 
   if (!krogerProvider.isAvailable()) {
     report.errors.push('Kroger credentials are not configured.');
@@ -128,16 +179,29 @@ export async function refreshLiveOffers(): Promise<RefreshReport> {
   }
 
   const krogerChainIds = new Set(CHAINS.filter((chain) => chain.provider === 'kroger').map((chain) => chain.id));
-  const stores = allStores().filter((store) => krogerChainIds.has(store.chainId) && store.krogerLocationId);
+  const stores = allStores().filter(
+    (store) =>
+      krogerChainIds.has(store.chainId) &&
+      store.krogerLocationId &&
+      (!options?.storeIds || options.storeIds.includes(store.id)),
+  );
 
   for (const store of stores) {
     report.attemptedStores++;
-    const products = productsForChain(store.chainId);
+    const products = productsForChain(store.chainId, options?.itemIds);
+
+    // Skip anything fetched recently. Re-asking for a price that has not moved
+    // wastes the request budget that matters most when it is rationed.
+    const fresh = stillFresh(store.id, products.map((product) => product.id));
+    const needed = products.filter((product) => !fresh.has(product.id));
+    report.reused += fresh.size;
+    if (needed.length === 0) continue;
+
     try {
-      const offers = await krogerProvider.fetchOffers(store, products);
+      const offers = await krogerProvider.fetchOffers(store, needed);
       writeOffers(offers);
       report.updated += offers.length;
-      report.missed += products.length - offers.length;
+      report.missed += needed.length - offers.length;
     } catch (error) {
       report.errors.push(`${store.label}: ${error instanceof Error ? error.message : String(error)}`);
     }

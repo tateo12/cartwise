@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Car, Check, ClipboardCopy, ExternalLink, Loader2, MapPin, ShoppingCart, TriangleAlert } from 'lucide-react';
 import { clsx } from 'clsx';
-import { pushKrogerCartAction, refreshLiveOffersAction } from '@/app/actions';
+import { priceMyListAction, pushKrogerCartAction } from '@/app/actions';
 import type { TripStoreGroup, TripView } from '@/server/trip';
 import { Money, Panel, PanelHeader } from '@/components/ui';
 
@@ -35,7 +35,7 @@ export function TripFlow({ view }: { view: TripView }) {
   const onReady = () => {
     startTransition(async () => {
       try {
-        const report = await refreshLiveOffersAction();
+        const report = await priceMyListAction();
         // "No credentials" is a normal state, not a failure. Reporting it as an
         // error would make the default experience look broken.
         const realError = report.errors.find((message) => !/not configured/i.test(message));
@@ -43,7 +43,9 @@ export function TripFlow({ view }: { view: TripView }) {
           realError
             ? realError
             : report.updated > 0
-              ? `${report.updated} live prices refreshed`
+              ? `${report.updated} live prices fetched` +
+                (report.reused > 0 ? ` · ${report.reused} still fresh` : '') +
+                (report.missed > 0 ? ` · ${report.missed} unavailable` : '')
               : 'Priced from seeded data — no live sources connected',
         );
       } catch {

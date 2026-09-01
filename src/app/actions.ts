@@ -6,7 +6,9 @@ import { addToKrogerCart, disconnectKroger, type CartPushResult } from '@/provid
 import { buildOfferIndex } from '@/db/queries';
 import { bestAtStore } from '@/core/optimizer';
 import { buildBasketView } from '@/server/view';
+import { buildReceiptImport, type ReceiptImport } from '@/server/receiptImport';
 import {
+  ValidationError,
   assertIsoDate,
   assertItemId,
   assertOptionalPriceCents,
@@ -15,6 +17,7 @@ import {
   assertStoreIds,
   assertStoreId,
 } from '@/server/validate';
+import { basket, selectedStoreIds } from '@/db/queries';
 import {
   addWatch,
   clearBasket,
@@ -103,6 +106,22 @@ export async function recordReceiptAction(
  */
 export async function refreshLiveOffersAction(): Promise<RefreshReport> {
   const report = await refreshLiveOffers();
+  revalidateAll();
+  return report;
+}
+
+/**
+ * Prices exactly the current basket at exactly the selected stores.
+ *
+ * This is what "Ready" runs. Scoping it to the list is the whole point: a
+ * 14-line basket at 4 stores is ~56 lookups, where refreshing the catalog
+ * everywhere is ~480. Fetching prices nobody asked for is slower for the user
+ * and far harder to justify to the retailer.
+ */
+export async function priceMyListAction(): Promise<RefreshReport> {
+  const itemIds = basket().map((line) => line.itemId);
+  const storeIds = selectedStoreIds();
+  const report = await refreshLiveOffers({ itemIds, storeIds });
   revalidateAll();
   return report;
 }
@@ -196,4 +215,37 @@ export async function pushKrogerCartAction(
 export async function disconnectKrogerAction(): Promise<void> {
   disconnectKroger();
   revalidateAll();
+}
+
+/**
+ * Parses pasted receipt text and matches it to the catalog for review.
+ *
+ * Read-only: nothing is saved until you confirm. These become the only
+ * `provenance: 'user'` prices in the app, so a wrong match would become ground
+ * truth and quietly poison every later comparison.
+ */
+export async function analyzeReceiptAction(text: string): Promise<ReceiptImport> {
+  if (typeof text !== 'string' || text.trim().length === 0) {
+    throw new ValidationError('Paste some receipt text first.');
+  }
+  // Generous, but bounded: a long receipt is a few thousand characters.
+  if (text.length > 100_000) throw new ValidationError('That is too long to be a receipt.');
+  return buildReceiptImport(text);
+}
+
+/**
+ * Saves the confirmed lines as a real purchase.
+ *
+ * Only itemId, price and quantity cross the boundary, all validated, so a
+ * malformed paste cannot write nonsense into your price history.
+ */
+export async function saveReceiptImportAction(
+  storeId: string,
+  purchasedAt: string,
+  lines: { itemId: string; priceCents: number; quantity: number }[],
+): Promise<{ receiptId: number; lineCount: number }> {
+  const validLines = assertReceiptLines(lines);
+  const receiptId = recordReceipt(assertStoreId(storeId), assertIsoDate(purchasedAt), validLines);
+  revalidateAll();
+  return { receiptId, lineCount: validLines.length };
 }

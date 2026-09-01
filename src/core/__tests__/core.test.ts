@@ -7,6 +7,7 @@ import { buildProducts, buildOffers, promoState, regularPriceCents, shelfPriceCe
 import { STORES } from '../../data/stores';
 import { ITEMS } from '../../data/items';
 import { krogerProvider } from '../../providers/kroger';
+import { parseReceipt, reconcile } from '../receiptParser';
 
 describe('parseSize', () => {
   test('parses plain sizes into base units', () => {
@@ -702,5 +703,96 @@ describe('a live price is never judged against seeded history (regression)', () 
       expect(VERDICT_LABEL[verdict]).toBeTruthy();
       expect(VERDICT_TONE[verdict]).toBeTruthy();
     }
+  });
+});
+
+describe('receipt parser', () => {
+  // A realistic Smith's/Kroger-style receipt, including the awkward parts.
+  const SMITHS = `
+SMITH'S FOOD & DRUG
+876 E 800 S  SALT LAKE CITY UT
+STORE #0060   09/01/26  6:42PM
+
+0001111041700 KRO WHOLE MILK GAL      3.29 F
+BANANAS 2.13 lb @ $0.58/lb            1.24 F
+2 @ 1.99  KRO LG EGGS 18CT            3.98 F
+07 SHARP CHEDDAR 8OZ                  2.99 T
+KRO OLIVE OIL 25OZ                   12.99 T
+                    SUBTOTAL         24.49
+                    TAX               1.06
+                    TOTAL            25.55
+                    DEBIT            25.55
+THANK YOU FOR SHOPPING
+`;
+
+  test('reads plain, weighted and multi-quantity lines', () => {
+    const receipt = parseReceipt(SMITHS);
+    const byName = (fragment: string) => receipt.lines.find((line) => line.description.includes(fragment));
+
+    expect(receipt.lines).toHaveLength(5);
+
+    // Leading UPC stripped, tax flag stripped.
+    expect(byName('WHOLE MILK')?.totalCents).toBe(329);
+    expect(byName('WHOLE MILK')?.description).toBe('KRO WHOLE MILK GAL');
+
+    // Weighted line: the LINE total is what was paid, not the per-pound rate.
+    const bananas = byName('BANANAS');
+    expect(bananas?.totalCents).toBe(124);
+    expect(bananas?.weight).toEqual({ amount: 2.13, unit: 'lb', perUnitCents: 58 });
+
+    // "2 @ 1.99" means quantity 2 and a line total of 3.98.
+    const eggs = byName('LG EGGS');
+    expect(eggs?.quantity).toBe(2);
+    expect(eggs?.totalCents).toBe(398);
+
+    // Leading department number stripped.
+    expect(byName('SHARP CHEDDAR')?.description).toBe('SHARP CHEDDAR 8OZ');
+  });
+
+  test('never treats totals, tax or payment lines as items', () => {
+    const receipt = parseReceipt(SMITHS);
+    const text = receipt.lines.map((line) => line.description).join(' ').toUpperCase();
+    for (const word of ['SUBTOTAL', 'TAX', 'TOTAL', 'DEBIT', 'THANK']) {
+      expect(text).not.toContain(word);
+    }
+  });
+
+  test('detects the store from the header', () => {
+    expect(parseReceipt(SMITHS).detectedStore).toBe('kroger');
+    expect(parseReceipt('WINCO FOODS\nMILK 2.98\n').detectedStore).toBe('winco');
+    expect(parseReceipt("TRADER JOE'S\nBANANAS 0.29\n").detectedStore).toBe('traderjoes');
+  });
+
+  test('reconciles the parsed sum against the stated total', () => {
+    const receipt = parseReceipt(SMITHS);
+    const check = reconcile(receipt);
+    // 3.29 + 1.24 + 3.98 + 2.99 + 12.99 = 24.49, matching the printed subtotal.
+    expect(check.parsedTotalCents).toBe(2449);
+    expect(receipt.statedTotalCents).toBe(2555);
+    // The gap is sales tax, well inside tolerance.
+    expect(check.differenceCents).toBe(106);
+    expect(check.looksComplete).toBe(true);
+  });
+
+  test('flags an incomplete parse instead of quietly under-reporting', () => {
+    // A receipt whose lines cannot be read should NOT look complete just
+    // because the few lines we did read summed to something.
+    const receipt = parseReceipt('SMITH\'S\nMILK 3.29\nTOTAL 48.10\n');
+    const check = reconcile(receipt);
+    expect(check.parsedTotalCents).toBe(329);
+    expect(check.looksComplete).toBe(false);
+  });
+
+  test('a leading number that is a size is not mistaken for a quantity', () => {
+    // "12 OZ COFFEE" is one 12oz bag, not twelve coffees.
+    const receipt = parseReceipt("SMITH'S\n12 OZ COFFEE MED ROAST   8.99\n");
+    expect(receipt.lines[0]?.quantity).toBe(1);
+    expect(receipt.lines[0]?.totalCents).toBe(899);
+  });
+
+  test('refunds and zero-value lines are not treated as purchases', () => {
+    const receipt = parseReceipt("SMITH'S\nMILK 3.29\nBOTTLE DEPOSIT REFUND -1.20\nFREEBIE 0.00\n");
+    expect(receipt.lines).toHaveLength(1);
+    expect(receipt.lines[0].totalCents).toBe(329);
   });
 });

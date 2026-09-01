@@ -15,7 +15,7 @@ export default function ReceiptsPage() {
         <EmptyState
           title="No trips logged"
           body="Recorded trips are the only prices in Cartwise that are neither fetched nor seeded — they're what you actually paid, and they drive the pantry and staples list. Hit “I bought this” on the dashboard after a shop."
-          cta={{ href: '/items', label: 'Browse prices' }}
+          cta={{ href: '/receipts/add', label: 'Add a receipt' }}
         />
       </Panel>
     );
@@ -27,7 +27,15 @@ export default function ReceiptsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-4">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight text-zinc-100">Receipts</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-lg font-semibold tracking-tight text-zinc-100">Receipts</h1>
+          <Link
+            href="/receipts/add"
+            className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-emerald-300"
+          >
+            Add a receipt
+          </Link>
+        </div>
         <p className="mt-1 text-[13px] text-zinc-500">
           {rows.length} logged {rows.length === 1 ? 'trip' : 'trips'} &middot;{' '}
           <span className="tnum"><Money cents={lifetimeCents} /></span> total.
