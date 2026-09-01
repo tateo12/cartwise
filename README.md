@@ -172,30 +172,16 @@ No other chain has a usable cart API. Walmart, Target and Costco are link-only.
 Best of both: always available on your phone, completely private, and it keeps
 live prices and cart push because it is a real server.
 
-Run this **on the machine that will host it**, not from another computer.
-
-Because this repo is **private**, the clone needs authentication, so a bare
-`curl | bash` one-liner will 404. Clone first, then run the script:
+Run this **on the machine that will host it**, not from another computer:
 
 ```bash
 # macOS (e.g. a Mac mini)
-gh auth login                                  # once per machine
-gh repo clone tateo12/cartwise ~/cartwise
-cd ~/cartwise && bash scripts/host-on-mac.sh
+curl -fsSL https://raw.githubusercontent.com/tateo12/cartwise/main/scripts/host-on-mac.sh | bash
 ```
 
 ```powershell
 # Windows
-gh auth login
-gh repo clone tateo12/cartwise $HOME\cartwise
-cd $HOME\cartwise; .\scripts\host-on-windows.ps1
-```
-
-If you make the repo public, the one-liners below work instead, with no auth on
-the host at all:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/tateo12/cartwise/main/scripts/host-on-mac.sh | bash
+irm https://raw.githubusercontent.com/tateo12/cartwise/main/scripts/host-on-windows.ps1 | iex
 ```
 
 Each script installs bun if needed, clones and builds, starts the server, and
