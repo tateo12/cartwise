@@ -18,7 +18,17 @@ fi
 command -v bun >/dev/null || { echo "    Installing bun"; curl -fsSL https://bun.sh/install | bash; export PATH="$HOME/.bun/bin:$PATH"; }
 
 echo "==> Fetching code"
-if [ -d "$DIR/.git" ]; then git -C "$DIR" pull --ff-only; else git clone "$REPO" "$DIR"; fi
+if [ -d "$DIR/.git" ]; then
+  git -C "$DIR" pull --ff-only
+else
+  # The repo is private, so an unauthenticated clone fails with a confusing
+  # "repository not found". Say what is actually wrong.
+  git clone "$REPO" "$DIR" || {
+    echo "    Clone failed. This repo is private, so authenticate first:"
+    echo "      gh auth login && gh repo clone tateo12/cartwise $DIR"
+    exit 1
+  }
+fi
 cd "$DIR"
 
 echo "==> Building"
