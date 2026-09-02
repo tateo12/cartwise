@@ -278,10 +278,20 @@ export function unpinMatch(productId: string): void {
  */
 export interface TripSettings {
   home: { lat: number; lon: number };
+  /** Human-readable home, when the user set it from an address. */
+  homeLabel: string | null;
   mpg: number;
+  /** Vehicle the mpg came from, when looked up rather than typed. */
+  vehicleLabel: string | null;
   fuelPriceCents: number;
+  /** Where the fuel price came from, so the UI never implies a local pump price. */
+  fuelSource: 'epa-national' | 'manual' | 'default';
+  /** When the EPA price was last fetched. */
+  fuelFetchedAt: string | null;
   /** False until the user has actually set their home position. */
   homeIsSet: boolean;
+  /** False while mpg is still the generic default. */
+  vehicleIsSet: boolean;
 }
 
 /** Downtown Salt Lake, purely so the maths has a starting point. */
@@ -298,12 +308,28 @@ export function tripSettings(): TripSettings {
   const mpg = settingValue('mpg');
   const fuel = settingValue('fuel_price_cents');
 
+  const source = settingValue('fuel_price_source');
   return {
     home: lat && lon ? { lat: Number(lat), lon: Number(lon) } : DEFAULT_HOME,
+    homeLabel: settingValue('home_label'),
     mpg: mpg ? Number(mpg) : DEFAULT_VEHICLE.mpg,
+    vehicleLabel: settingValue('vehicle_label'),
     fuelPriceCents: fuel ? Number(fuel) : DEFAULT_VEHICLE.fuelPriceCents,
+    fuelSource: fuel == null ? 'default' : source === 'manual' ? 'manual' : 'epa-national',
+    fuelFetchedAt: settingValue('fuel_price_fetched_at'),
     homeIsSet: lat != null && lon != null,
+    vehicleIsSet: mpg != null,
   };
+}
+
+/** Stores a string setting. Kept separate so labels are not coerced to numbers. */
+export function setSettingText(key: string, value: string): void {
+  ensureSeeded();
+  run(
+    'insert into app_settings (key, value) values (?,?) on conflict(key) do update set value = excluded.value',
+    key,
+    value,
+  );
 }
 
 export function setTripSettings(update: Partial<{ lat: number; lon: number; mpg: number; fuelPriceCents: number }>): void {

@@ -1,9 +1,10 @@
 import { RefreshLiveButton } from '@/components/RefreshLiveButton';
+import { TripSettingsPanel } from '@/components/TripSettingsPanel';
 import { StoreSelector } from '@/components/StoreSelector';
 import { Panel, PanelHeader } from '@/components/ui';
 import { CHAINS } from '@/data/stores';
 import { liveStatus } from '@/db/live';
-import { allStores, selectedStoreIds } from '@/db/queries';
+import { allStores, selectedStoreIds, tripSettings } from '@/db/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,7 @@ export default function StoresPage() {
   const selected = selectedStoreIds();
   const providerByChain = Object.fromEntries(CHAINS.map((c) => [c.id, c.provider])) as Record<string, 'kroger' | 'seed'>;
   const live = liveStatus();
+  const settings = tripSettings();
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -27,6 +29,8 @@ export default function StoresPage() {
         <PanelHeader title="Salt Lake Valley" hint="Drive times are one-way from home" />
         <StoreSelector stores={stores} selected={selected} providerByChain={providerByChain} />
       </Panel>
+
+      <TripSettingsPanel settings={settings} />
 
       <Panel className="px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">

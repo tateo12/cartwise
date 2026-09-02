@@ -7,11 +7,15 @@ import { buildOfferIndex } from '@/db/queries';
 import { bestAtStore } from '@/core/optimizer';
 import { buildBasketView } from '@/server/view';
 import { buildReceiptImport, type ReceiptImport } from '@/server/receiptImport';
+import { fetchFuelPrices, fetchMakes, fetchModels, fetchTrims, fetchVehicleEconomy, fetchYears, type MenuOption } from '@/providers/fuelEconomy';
+import { geocodeAddress } from '@/providers/geocode';
+import { setSettingText, setTripSettings, tripSettings } from '@/db/queries';
 import {
   ValidationError,
   assertIsoDate,
   assertItemId,
   assertOptionalPriceCents,
+  assertPriceCents,
   assertQuantity,
   assertReceiptLines,
   assertStoreIds,
@@ -248,4 +252,87 @@ export async function saveReceiptImportAction(
   const receiptId = recordReceipt(assertStoreId(storeId), assertIsoDate(purchasedAt), validLines);
   revalidateAll();
   return { receiptId, lineCount: validLines.length };
+}
+
+// ── Trip settings: home, vehicle, fuel price ──────────────────────────────
+
+/**
+ * Pulls the current national average pump price from the EPA.
+ *
+ * Overwrites only an EPA-sourced or default value: a price the user typed
+ * themselves is theirs to keep, and silently replacing it would be worse than
+ * being slightly stale.
+ */
+export async function refreshFuelPriceAction(): Promise<{ ok: boolean; cents?: number; reason?: string }> {
+  const current = tripSettings();
+  if (current.fuelSource === 'manual') {
+    return { ok: false, reason: 'You set this price yourself, so it was left alone.' };
+  }
+
+  const prices = await fetchFuelPrices();
+  if (!prices) return { ok: false, reason: 'Could not reach the EPA price service.' };
+
+  setTripSettings({ fuelPriceCents: prices.regularCents });
+  setSettingText('fuel_price_source', 'epa');
+  setSettingText('fuel_price_fetched_at', new Date().toISOString());
+  revalidateAll();
+  return { ok: true, cents: prices.regularCents };
+}
+
+export async function setFuelPriceAction(cents: number): Promise<void> {
+  setTripSettings({ fuelPriceCents: assertPriceCents(cents) });
+  setSettingText('fuel_price_source', 'manual');
+  revalidateAll();
+}
+
+export async function setHomeAction(address: string): Promise<{ ok: boolean; label?: string; reason?: string }> {
+  if (typeof address !== 'string' || address.trim().length < 3) {
+    return { ok: false, reason: 'Enter a street address, cross-streets, or a ZIP code.' };
+  }
+  const found = await geocodeAddress(address);
+  if (!found) return { ok: false, reason: 'Could not find that address.' };
+
+  setTripSettings({ lat: found.lat, lon: found.lon });
+  setSettingText('home_label', found.label);
+  revalidateAll();
+  return { ok: true, label: found.label };
+}
+
+/** Vehicle picker steps. Each is a plain read from the EPA menu endpoints. */
+export async function vehicleYearsAction(): Promise<MenuOption[]> {
+  return fetchYears();
+}
+export async function vehicleMakesAction(year: string): Promise<MenuOption[]> {
+  return fetchMakes(year);
+}
+export async function vehicleModelsAction(year: string, make: string): Promise<MenuOption[]> {
+  return fetchModels(year, make);
+}
+export async function vehicleTrimsAction(year: string, make: string, model: string): Promise<MenuOption[]> {
+  return fetchTrims(year, make, model);
+}
+
+/**
+ * Sets mpg from a specific EPA vehicle record.
+ *
+ * Uses the COMBINED rating: a grocery run is town driving, so the highway
+ * figure would understate what a detour costs.
+ */
+export async function setVehicleAction(vehicleId: string): Promise<{ ok: boolean; label?: string; mpg?: number; reason?: string }> {
+  const economy = await fetchVehicleEconomy(vehicleId);
+  if (!economy) return { ok: false, reason: 'Could not read that vehicle from the EPA.' };
+
+  setTripSettings({ mpg: economy.combinedMpg });
+  setSettingText('vehicle_label', economy.label);
+  revalidateAll();
+  return { ok: true, label: economy.label, mpg: economy.combinedMpg };
+}
+
+export async function setMpgAction(mpg: number): Promise<void> {
+  if (typeof mpg !== 'number' || !Number.isFinite(mpg) || mpg <= 0 || mpg > 200) {
+    throw new ValidationError('Enter an mpg between 1 and 200.');
+  }
+  setTripSettings({ mpg });
+  setSettingText('vehicle_label', `${mpg} mpg (entered manually)`);
+  revalidateAll();
 }
