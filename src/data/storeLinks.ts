@@ -81,6 +81,12 @@ export const STORE_LINKS: Record<string, StoreLink> = {
     url: (q) => `https://www.instacart.com/store/winco-foods/s?k=${encode(q)}`,
     instacart: true,
   },
+  freshmarket: {
+    label: 'Fresh Market',
+    home: 'https://shop.freshmarketstores.com/store/fresh-market/storefront',
+    url: (q) => `https://shop.freshmarketstores.com/store/fresh-market/s?k=${encode(q)}`,
+    instacart: true,
+  },
   traderjoes: {
     // Trader Joe's lists products but not prices. The link is still useful for
     // confirming they carry it; the price has to come off your receipt.

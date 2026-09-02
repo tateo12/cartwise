@@ -8,6 +8,8 @@ import { STORES } from '../../data/stores';
 import { ITEMS } from '../../data/items';
 import { krogerProvider } from '../../providers/kroger';
 import { parseReceipt, reconcile } from '../receiptParser';
+import { parseStorefront } from '../../providers/storefront';
+import { readFileSync } from 'node:fs';
 
 describe('parseSize', () => {
   test('parses plain sizes into base units', () => {
@@ -794,5 +796,45 @@ THANK YOU FOR SHOPPING
     const receipt = parseReceipt("SMITH'S\nMILK 3.29\nBOTTLE DEPOSIT REFUND -1.20\nFREEBIE 0.00\n");
     expect(receipt.lines).toHaveLength(1);
     expect(receipt.lines[0].totalCents).toBe(329);
+  });
+});
+
+describe('storefront parser (real captured markup)', () => {
+  const html = readFileSync(new URL('./fixtures/storefront-card.html', import.meta.url), 'utf8');
+
+  test('extracts a price, size and name from every card', () => {
+    const listings = parseStorefront(html);
+    expect(listings.length).toBeGreaterThanOrEqual(3);
+    for (const listing of listings) {
+      expect(listing.priceCents).toBeGreaterThan(0);
+      expect(Number.isInteger(listing.priceCents)).toBe(true);
+      expect(listing.name.length).toBeGreaterThan(3);
+      expect(listing.sourceId).toMatch(/^\d+$/);
+    }
+  });
+
+  test('a promoted card yields the product name, not a badge or price label', () => {
+    // Broke twice: DOM order puts "Original Price: $3.99" and badges like
+    // "8% off" between the price and the name, so the first readable line was
+    // neither. The product URL slug is the stable source.
+    const listings = parseStorefront(html);
+    for (const listing of listings) {
+      expect(listing.name).not.toMatch(/^\d+%\s*off/i);
+      expect(listing.name).not.toMatch(/original price|current price/i);
+      expect(listing.name).not.toBe('Best seller');
+    }
+  });
+
+  test('a pre-sale price is kept only when it is genuinely higher', () => {
+    for (const listing of parseStorefront(html)) {
+      if (listing.regularPriceCents != null) {
+        expect(listing.regularPriceCents).toBeGreaterThan(listing.priceCents);
+      }
+    }
+  });
+
+  test('returns nothing rather than guessing on unrelated markup', () => {
+    expect(parseStorefront('<div>no products here</div>')).toEqual([]);
+    expect(parseStorefront('')).toEqual([]);
   });
 });

@@ -28,7 +28,7 @@ export interface Chain {
   /** Store-brand label used when this chain has no name-brand equivalent. */
   ownBrand: string;
   /** Which PriceProvider services this chain. */
-  provider: 'kroger' | 'target' | 'seed';
+  provider: 'kroger' | 'storefront' | 'seed';
 }
 
 /** One physical location. Prices belong to Stores, not Chains. */

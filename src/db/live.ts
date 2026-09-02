@@ -1,6 +1,8 @@
 import type { Offer, Product } from '@/core/domain';
 import { CHAINS } from '@/data/stores';
 import { krogerProvider } from '@/providers/kroger';
+import { storefrontProvider } from '@/providers/storefront';
+import type { PriceProvider } from '@/providers/types';
 import { all, run, tx } from './index';
 import { allStores } from './queries';
 import { ensureSeeded } from './seed';
@@ -165,24 +167,40 @@ export async function refreshLiveOffers(options?: {
   ensureSeeded();
   const report: RefreshReport = { attemptedStores: 0, updated: 0, missed: 0, reused: 0, errors: [] };
 
-  if (!krogerProvider.isAvailable()) {
-    report.errors.push('Kroger credentials are not configured.');
+  // Every provider that can price something, keyed by the id chains declare.
+  const providers: Record<string, PriceProvider> = {
+    kroger: krogerProvider,
+    storefront: storefrontProvider,
+  };
+
+  const available = Object.entries(providers).filter(([, provider]) => provider.isAvailable());
+  if (available.length === 0) {
+    report.errors.push('No live price sources are configured.');
     return report;
   }
 
-  // Pre-flight the credentials so rejected keys read as an auth error rather
-  // than as "Kroger had no matching products".
-  const auth = await krogerProvider.checkAuth?.();
-  if (auth && !auth.ok) {
-    report.errors.push(auth.reason ?? 'Kroger authentication failed.');
-    return report;
+  // Pre-flight each one so a rejected key or a missing browser reads as its
+  // real cause rather than as "the store had no matching products".
+  const usable: Record<string, PriceProvider> = {};
+  for (const [id, provider] of available) {
+    const auth = await provider.checkAuth?.();
+    if (auth && !auth.ok) {
+      report.errors.push(auth.reason ?? `${provider.label} is unavailable.`);
+      continue;
+    }
+    usable[id] = provider;
   }
+  if (Object.keys(usable).length === 0) return report;
 
-  const krogerChainIds = new Set(CHAINS.filter((chain) => chain.provider === 'kroger').map((chain) => chain.id));
+  const providerForChain = new Map(
+    CHAINS.filter((chain) => chain.provider in usable).map((chain) => [chain.id, usable[chain.provider]]),
+  );
+
   const stores = allStores().filter(
     (store) =>
-      krogerChainIds.has(store.chainId) &&
-      store.krogerLocationId &&
+      providerForChain.has(store.chainId) &&
+      // Kroger addresses a specific location id; storefronts do not need one.
+      (providerForChain.get(store.chainId) !== krogerProvider || store.krogerLocationId) &&
       (!options?.storeIds || options.storeIds.includes(store.id)),
   );
 
@@ -197,8 +215,11 @@ export async function refreshLiveOffers(options?: {
     report.reused += fresh.size;
     if (needed.length === 0) continue;
 
+    const provider = providerForChain.get(store.chainId);
+    if (!provider) continue;
+
     try {
-      const offers = await krogerProvider.fetchOffers(store, needed);
+      const offers = await provider.fetchOffers(store, needed);
       writeOffers(offers);
       report.updated += offers.length;
       report.missed += needed.length - offers.length;
@@ -242,7 +263,7 @@ export function liveStatus(): LiveStatus {
   )[0];
 
   return {
-    configured: krogerProvider.isAvailable(),
+    configured: krogerProvider.isAvailable() || storefrontProvider.isAvailable(),
     liveOfferCount: Number(row?.c ?? 0),
     lastRefreshedAt: row?.last ?? null,
     liveHistoryPoints: Number(history?.c ?? 0),

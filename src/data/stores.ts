@@ -14,8 +14,10 @@ export const CHAINS: Chain[] = [
   { id: 'walmart', name: 'Walmart', ownBrand: 'Great Value', provider: 'seed' },
   { id: 'costco', name: 'Costco', ownBrand: 'Kirkland Signature', provider: 'seed' },
   { id: 'target', name: 'Target', ownBrand: 'Good & Gather', provider: 'seed' },
-  { id: 'harmons', name: 'Harmons', ownBrand: 'Harmons', provider: 'seed' },
-  { id: 'sprouts', name: 'Sprouts', ownBrand: 'Sprouts', provider: 'seed' },
+  { id: 'harmons', name: 'Harmons', ownBrand: 'Harmons', provider: 'storefront' },
+  { id: 'sprouts', name: 'Sprouts', ownBrand: 'Sprouts', provider: 'storefront' },
+  // Utah chain (Associated Food Stores), also on a white-label storefront.
+  { id: 'freshmarket', name: 'Fresh Market', ownBrand: 'Food Club', provider: 'storefront' },
   { id: 'traderjoes', name: "Trader Joe's", ownBrand: "Trader Joe's", provider: 'seed' },
 ];
 
@@ -78,6 +80,14 @@ export const STORES: Store[] = [
     label: 'Sprouts — Sugar House',
     address: '1206 E 2100 S, Salt Lake City, UT',
     driveMinutes: 8,
+  },
+  {
+    id: 'freshmarket-slc',
+    chainId: 'freshmarket',
+    banner: 'Fresh Market',
+    label: 'Fresh Market — SLC',
+    address: '1300 E 2100 S, Salt Lake City, UT',
+    driveMinutes: 10,
   },
   {
     id: 'tj-sugarhouse',

@@ -39,13 +39,20 @@ export function TripFlow({ view }: { view: TripView }) {
         // "No credentials" is a normal state, not a failure. Reporting it as an
         // error would make the default experience look broken.
         const realError = report.errors.find((message) => !/not configured/i.test(message));
+        // "Everything was already fresh" is a success, not an absence of live
+        // sources. Reporting it as the latter made a working fetch look broken.
+        const live = report.updated + report.reused;
         setRefreshNote(
           realError
             ? realError
-            : report.updated > 0
-              ? `${report.updated} live prices fetched` +
-                (report.reused > 0 ? ` · ${report.reused} still fresh` : '') +
-                (report.missed > 0 ? ` · ${report.missed} unavailable` : '')
+            : live > 0
+              ? [
+                  report.updated > 0 ? `${report.updated} live prices fetched` : null,
+                  report.reused > 0 ? `${report.reused} already fresh` : null,
+                  report.missed > 0 ? `${report.missed} unavailable` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
               : 'Priced from seeded data — no live sources connected',
         );
       } catch {
@@ -85,7 +92,7 @@ export function TripFlow({ view }: { view: TripView }) {
               className="mt-5 inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-[13px] font-semibold text-ink transition hover:bg-emerald-300 disabled:opacity-60"
             >
               {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ArrowRight className="size-4" aria-hidden />}
-              {pending ? 'Pricing your list…' : "Ready — price my list"}
+              {pending ? 'Fetching live prices, this can take a minute…' : "Ready — price my list"}
             </button>
           </div>
         </Panel>

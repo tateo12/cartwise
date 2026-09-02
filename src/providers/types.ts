@@ -6,7 +6,7 @@ import type { Offer, Product, Store } from '@/core/domain';
  * or a single component. See ADR 0003.
  */
 export interface PriceProvider {
-  id: 'kroger' | 'target' | 'seed';
+  id: 'kroger' | 'storefront' | 'seed';
   /** Human label for the provenance badge. */
   label: string;
   /** False when credentials/config are missing, so callers can fall back. */
