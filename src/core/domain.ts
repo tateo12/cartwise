@@ -43,8 +43,17 @@ export interface Store {
   krogerLocationId?: string;
   /** Target store id (`pricing_store_id`), when this store is priceable live. */
   targetStoreId?: string;
-  /** One-way drive minutes from home. Powers the "is the extra stop worth it" math. */
+  /** One-way drive minutes from home. Rough, and only used for display. */
   driveMinutes: number;
+  /**
+   * Real coordinates, geocoded from the street address.
+   *
+   * Used for route distance and fuel cost. Summing per-store drive minutes
+   * assumed you drove home between every stop, which overstated multi-stop
+   * trips; an actual route needs positions.
+   */
+  lat: number;
+  lon: number;
 }
 
 /** The cross-store equivalence class. A Basket is a list of these. */

@@ -2,6 +2,7 @@ import type { BasketLine, Offer, Product, Provenance, Store } from '@/core/domai
 import type { OfferIndex } from '@/core/optimizer';
 import { offerKey } from '@/core/optimizer';
 import type { PricePoint } from '@/core/history';
+import { DEFAULT_VEHICLE } from '@/core/geo';
 import { all, get, run, db, tx } from './index';
 import { ensureSeeded } from './seed';
 
@@ -48,6 +49,8 @@ interface StoreRow {
   kroger_location_id: string | null;
   drive_minutes: number;
   provider: string;
+  lat: number | null;
+  lon: number | null;
 }
 
 interface ItemRow {
@@ -110,6 +113,8 @@ function toStore(row: StoreRow): Store {
     address: row.address,
     krogerLocationId: row.kroger_location_id ?? undefined,
     driveMinutes: Number(row.drive_minutes),
+    lat: Number(row.lat ?? 0),
+    lon: Number(row.lon ?? 0),
   };
 }
 
@@ -262,6 +267,59 @@ export function pinMatch(productId: string, itemId: string): void {
 export function unpinMatch(productId: string): void {
   ensureSeeded();
   run('delete from pinned_matches where product_id = ?', productId);
+}
+
+/**
+ * Where trips start and end, plus the vehicle they are driven in.
+ *
+ * Defaults are deliberately generic and clearly editable: a fuel figure the
+ * user has not set is a guess, and the UI says so rather than presenting it as
+ * their number.
+ */
+export interface TripSettings {
+  home: { lat: number; lon: number };
+  mpg: number;
+  fuelPriceCents: number;
+  /** False until the user has actually set their home position. */
+  homeIsSet: boolean;
+}
+
+/** Downtown Salt Lake, purely so the maths has a starting point. */
+const DEFAULT_HOME = { lat: 40.7392, lon: -111.8757 };
+
+function settingValue(key: string): string | null {
+  ensureSeeded();
+  return get<{ value: string }>('select value from app_settings where key = ?', key)?.value ?? null;
+}
+
+export function tripSettings(): TripSettings {
+  const lat = settingValue('home_lat');
+  const lon = settingValue('home_lon');
+  const mpg = settingValue('mpg');
+  const fuel = settingValue('fuel_price_cents');
+
+  return {
+    home: lat && lon ? { lat: Number(lat), lon: Number(lon) } : DEFAULT_HOME,
+    mpg: mpg ? Number(mpg) : DEFAULT_VEHICLE.mpg,
+    fuelPriceCents: fuel ? Number(fuel) : DEFAULT_VEHICLE.fuelPriceCents,
+    homeIsSet: lat != null && lon != null,
+  };
+}
+
+export function setTripSettings(update: Partial<{ lat: number; lon: number; mpg: number; fuelPriceCents: number }>): void {
+  ensureSeeded();
+  const write = (key: string, value: number) =>
+    run(
+      'insert into app_settings (key, value) values (?,?) on conflict(key) do update set value = excluded.value',
+      key,
+      String(value),
+    );
+  tx(() => {
+    if (update.lat != null) write('home_lat', update.lat);
+    if (update.lon != null) write('home_lon', update.lon);
+    if (update.mpg != null) write('mpg', update.mpg);
+    if (update.fuelPriceCents != null) write('fuel_price_cents', update.fuelPriceCents);
+  });
 }
 
 export interface WatchRecord {

@@ -29,6 +29,8 @@ export const STORES: Store[] = [
     label: "Smith's — 900 E",
     address: '876 E 800 S, Salt Lake City, UT',
     krogerLocationId: '70300060',
+    lat: 40.75198,
+    lon: -111.85699,
     driveMinutes: 7,
   },
   {
@@ -37,6 +39,8 @@ export const STORES: Store[] = [
     banner: 'WinCo Foods',
     label: 'WinCo — Redwood Rd',
     address: '1717 S Redwood Rd, Salt Lake City, UT',
+    lat: 40.75224,
+    lon: -111.93906,
     driveMinutes: 14,
   },
   {
@@ -45,6 +49,8 @@ export const STORES: Store[] = [
     banner: 'Walmart',
     label: 'Walmart — 3300 S',
     address: '3555 S 900 E, Millcreek, UT',
+    lat: 40.67465,
+    lon: -111.86554,
     driveMinutes: 12,
   },
   {
@@ -53,6 +59,8 @@ export const STORES: Store[] = [
     banner: 'Costco',
     label: 'Costco — Sandy',
     address: '11100 S Auto Mall Dr, Sandy, UT',
+    lat: 40.55876,
+    lon: -111.89392,
     driveMinutes: 25,
   },
   {
@@ -63,6 +71,8 @@ export const STORES: Store[] = [
     // Address and store id confirmed against Target's own nearby_stores API.
     address: '2236 S 1300 E, Salt Lake City, UT',
     targetStoreId: '3365',
+    lat: 40.71519,
+    lon: -111.85337,
     driveMinutes: 8,
   },
   {
@@ -71,6 +81,8 @@ export const STORES: Store[] = [
     banner: 'Harmons',
     label: 'Harmons — Brickyard',
     address: '3200 S 1300 E, Salt Lake City, UT',
+    lat: 40.72307,
+    lon: -111.85374,
     driveMinutes: 9,
   },
   {
@@ -79,6 +91,10 @@ export const STORES: Store[] = [
     banner: 'Sprouts',
     label: 'Sprouts — Sugar House',
     address: '1206 E 2100 S, Salt Lake City, UT',
+    // Geocoded to the street, not the building: both share a 2100 S
+    // address, so these coordinates are within a block or so.
+    lat: 40.72519,
+    lon: -111.82486,
     driveMinutes: 8,
   },
   {
@@ -87,6 +103,10 @@ export const STORES: Store[] = [
     banner: 'Fresh Market',
     label: 'Fresh Market — SLC',
     address: '1300 E 2100 S, Salt Lake City, UT',
+    // Geocoded to the street, not the building: both share a 2100 S
+    // address, so these coordinates are within a block or so.
+    lat: 40.72519,
+    lon: -111.82486,
     driveMinutes: 10,
   },
   {
@@ -95,6 +115,8 @@ export const STORES: Store[] = [
     banner: "Trader Joe's",
     label: "Trader Joe's — Sugar House",
     address: '2148 Highland Dr, Salt Lake City, UT',
+    lat: 40.72426,
+    lon: -111.85969,
     driveMinutes: 8,
   },
 ];

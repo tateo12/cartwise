@@ -56,7 +56,7 @@ export function seedCatalog(): SeedReport {
     }
 
     const insertStore = conn.prepare(
-      'insert into stores (id, chain_id, banner, label, address, kroger_location_id, drive_minutes, provider) values (?,?,?,?,?,?,?,?)',
+      'insert into stores (id, chain_id, banner, label, address, kroger_location_id, drive_minutes, provider, lat, lon) values (?,?,?,?,?,?,?,?,?,?)',
     );
     for (const store of STORES) {
       insertStore.run(
@@ -68,6 +68,8 @@ export function seedCatalog(): SeedReport {
         store.krogerLocationId ?? null,
         store.driveMinutes,
         chainById.get(store.chainId)?.provider ?? 'seed',
+        store.lat,
+        store.lon,
       );
     }
 

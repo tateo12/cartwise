@@ -1,7 +1,8 @@
 import type { Plan, Store } from '@/core/domain';
 import { optimize } from '@/core/optimizer';
 import { formatUnitPrice, unitPriceCents } from '@/core/units';
-import { allItems, basket, buildOfferIndex, selectedStoreIds, type ItemRecord } from '@/db/queries';
+import { allItems, basket, buildOfferIndex, selectedStoreIds, tripSettings, type ItemRecord } from '@/db/queries';
+import { netSaving, tripCost } from '@/core/geo';
 import { storeLinkFor } from '@/data/storeLinks';
 import { storeById } from '@/data/stores';
 import { krogerCartStatus, type KrogerCartStatus } from '@/providers/krogerCart';
@@ -58,6 +59,19 @@ export interface TripOption {
   /** Cents saved versus the one-stop headline. Zero for the headline itself. */
   savingsCents: number;
   driveMinutes: number;
+  /** Estimated round-trip road miles, home out and home again. */
+  miles: number;
+  /** Estimated fuel cost of the whole trip, in cents. */
+  fuelCents: number;
+  /** Fuel this plan costs OVER the one-stop baseline. */
+  extraFuelCents: number;
+  /**
+   * Grocery saving minus the extra fuel. This is the number that answers
+   * "is the detour worth it", and it can be negative.
+   */
+  netSavingsCents: number;
+  /** True when the plan still wins after paying for the driving. */
+  worthIt: boolean;
   /** True for the plan the dashboard recommends. */
   recommended: boolean;
   groups: TripStoreGroup[];
@@ -67,6 +81,8 @@ export interface TripOption {
 
 export interface TripView {
   options: TripOption[];
+  /** Home position and vehicle used for the fuel maths. */
+  settings: ReturnType<typeof tripSettings>;
   /** Whether a real cart push is available for the Kroger-family store. */
   krogerCart: KrogerCartStatus;
   itemCount: number;
@@ -155,6 +171,7 @@ export function buildTripView(): TripView {
   if (selected.length === 0 || lines.length === 0) {
     return {
       options: [],
+      settings: tripSettings(),
       krogerCart: krogerCartStatus(),
       itemCount: 0,
       lineCount: lines.length,
@@ -164,20 +181,46 @@ export function buildTripView(): TripView {
   }
 
   const result = optimize(index, lines, selected);
+  const settings = tripSettings();
 
-  const toOption = (plan: Plan, recommended: boolean): TripOption => ({
+  /** Route distance and fuel for a plan's actual stops. */
+  const costOf = (plan: Plan) =>
+    tripCost(
+      settings.home,
+      plan.storeIds.flatMap((id) => {
+        const store = index.storesById.get(id);
+        return store ? [{ id, at: { lat: store.lat, lon: store.lon } }] : [];
+      }),
+      { mpg: settings.mpg, fuelPriceCents: settings.fuelPriceCents },
+    );
+
+  // The one-stop winner is the baseline every detour is measured against.
+  const baseline = costOf(result.winner);
+
+  const toOption = (plan: Plan, recommended: boolean): TripOption => {
+    const cost = costOf(plan);
+    const grocerySaving = Math.max(0, result.winner.totalCents - plan.totalCents);
+    const net = netSaving(grocerySaving, baseline.fuelCents, cost.fuelCents);
+    return {
     id: plan.storeIds.join('+') || 'none',
     label: STOP_LABELS[Math.min(plan.storeIds.length, STOP_LABELS.length - 1)] ?? `${plan.storeIds.length} stops`,
     stops: plan.storeIds.length,
     totalCents: plan.totalCents,
-    savingsCents: Math.max(0, result.winner.totalCents - plan.totalCents),
+    savingsCents: grocerySaving,
     driveMinutes: plan.driveMinutes,
+    miles: cost.miles,
+    fuelCents: cost.fuelCents,
+    extraFuelCents: net.extraFuelCents,
+    netSavingsCents: net.netSavingsCents,
+    // The recommended one-stop plan is the baseline, so it is trivially "worth it".
+    worthIt: recommended || net.worthIt,
     recommended,
     groups: groupPlan(plan, items),
     unavailable: plan.unavailableItemIds
       .map((id) => items.get(id))
       .filter((item): item is ItemRecord => item != null),
-  });
+    };
+  };
 
   const options: TripOption[] = [
     toOption(result.winner, true),
@@ -186,6 +229,7 @@ export function buildTripView(): TripView {
 
   return {
     options,
+    settings,
     krogerCart: krogerCartStatus(),
     itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
     lineCount: lines.length,

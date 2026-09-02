@@ -52,7 +52,10 @@ function migrate(conn: DatabaseSync): void {
       address             text not null,
       kroger_location_id  text,
       drive_minutes       integer not null,
-      provider            text not null
+      provider            text not null,
+      -- Geocoded position, for route distance and fuel cost.
+      lat                 real,
+      lon                 real
     );
 
     create table if not exists products (
@@ -102,6 +105,12 @@ function migrate(conn: DatabaseSync): void {
       item_id     text not null,
       created_at  text not null,
       primary key (product_id)
+    );
+
+    -- Home position and vehicle, for route distance and fuel cost.
+    create table if not exists app_settings (
+      key    text primary key,
+      value  text not null
     );
 
     create table if not exists selected_stores (
@@ -178,6 +187,9 @@ function addMissingColumns(conn: DatabaseSync): void {
   ensure('receipts', 'seeded', 'integer not null default 0');
   // The retailer's own barcode, needed to push items into their cart.
   ensure('offers', 'source_upc', 'text');
+  // Coordinates, so a multi-stop route can be measured rather than guessed.
+  ensure('stores', 'lat', 'real');
+  ensure('stores', 'lon', 'real');
   // Live prices must accumulate their own history: a deal verdict computed from
   // 90 days of seeded history is fiction once the current price is real.
   ensure('price_history', 'provenance', "text not null default 'seed'");

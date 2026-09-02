@@ -9,6 +9,7 @@ import { ITEMS } from '../../data/items';
 import { krogerProvider } from '../../providers/kroger';
 import { parseReceipt, reconcile } from '../receiptParser';
 import { parseStorefront } from '../../providers/storefront';
+import { bestRoute, fuelCostCents, haversineMiles, netSaving, roadMiles } from '../geo';
 import { readFileSync } from 'node:fs';
 
 describe('parseSize', () => {
@@ -101,9 +102,9 @@ describe('pricing determinism', () => {
 // ── Optimizer: hand-built fixture with known-correct answers ───────────────
 function fixture() {
   const stores: Store[] = [
-    { id: 'winco', chainId: 'c-winco', banner: 'WinCo', label: 'WinCo', address: '', driveMinutes: 14 },
-    { id: 'smiths', chainId: 'c-kroger', banner: "Smith's", label: "Smith's", address: '', driveMinutes: 7 },
-    { id: 'harmons', chainId: 'c-harmons', banner: 'Harmons', label: 'Harmons', address: '', driveMinutes: 9 },
+    { id: 'winco', chainId: 'c-winco', banner: 'WinCo', label: 'WinCo', address: '', driveMinutes: 14, lat: 40.7, lon: -111.9 },
+    { id: 'smiths', chainId: 'c-kroger', banner: "Smith's", label: "Smith's", address: '', driveMinutes: 7, lat: 40.7, lon: -111.9 },
+    { id: 'harmons', chainId: 'c-harmons', banner: 'Harmons', label: 'Harmons', address: '', driveMinutes: 9, lat: 40.7, lon: -111.9 },
   ];
 
   // milk + oil. WinCo does NOT carry oil — the forced-stop case.
@@ -532,10 +533,10 @@ describe('gap consolidation is minimum-stops, not greedy (regression)', () => {
    */
   function setCoverFixture() {
     const stores: Store[] = [
-      { id: 'anchor', chainId: 'c-anchor', banner: 'Anchor', label: 'Anchor', address: '', driveMinutes: 5 },
-      { id: 'a', chainId: 'c-a', banner: 'A', label: 'A', address: '', driveMinutes: 6 },
-      { id: 'b', chainId: 'c-b', banner: 'B', label: 'B', address: '', driveMinutes: 7 },
-      { id: 'c', chainId: 'c-c', banner: 'C', label: 'C', address: '', driveMinutes: 8 },
+      { id: 'anchor', chainId: 'c-anchor', banner: 'Anchor', label: 'Anchor', address: '', driveMinutes: 5, lat: 40.7, lon: -111.9 },
+      { id: 'a', chainId: 'c-a', banner: 'A', label: 'A', address: '', driveMinutes: 6, lat: 40.7, lon: -111.9 },
+      { id: 'b', chainId: 'c-b', banner: 'B', label: 'B', address: '', driveMinutes: 7, lat: 40.7, lon: -111.9 },
+      { id: 'c', chainId: 'c-c', banner: 'C', label: 'C', address: '', driveMinutes: 8, lat: 40.7, lon: -111.9 },
     ];
     const carries: Record<string, string[]> = {
       'c-anchor': ['i0'],
@@ -836,5 +837,82 @@ describe('storefront parser (real captured markup)', () => {
   test('returns nothing rather than guessing on unrelated markup', () => {
     expect(parseStorefront('<div>no products here</div>')).toEqual([]);
     expect(parseStorefront('')).toEqual([]);
+  });
+});
+
+describe('trip distance and fuel cost', () => {
+  // Real geocoded coordinates for three of the selectable stores.
+  const HOME = { lat: 40.7392, lon: -111.8757 };
+  const SMITHS = { id: 'smiths', at: { lat: 40.75198, lon: -111.85699 } };
+  const WINCO = { id: 'winco', at: { lat: 40.75224, lon: -111.93906 } };
+  const COSTCO = { id: 'costco', at: { lat: 40.55876, lon: -111.89392 } };
+
+  test('haversine matches a known Salt Lake distance', () => {
+    // Smith's (900 E) to WinCo (Redwood Rd) is about 4.3 straight-line miles.
+    const miles = haversineMiles(SMITHS.at, WINCO.at);
+    expect(miles).toBeGreaterThan(4.0);
+    expect(miles).toBeLessThan(4.6);
+  });
+
+  test('a round trip is longer than a one-way leg', () => {
+    const one = bestRoute(HOME, [SMITHS]);
+    // Out and back, so roughly double the one-way distance.
+    expect(one.miles).toBeGreaterThan(roadMiles(HOME, SMITHS.at) * 1.9);
+  });
+
+  test('route order is optimised, not taken as given', () => {
+    // Costco is far south; visiting it between two northern stores is wasteful.
+    const naive = [SMITHS, COSTCO, WINCO];
+    const best = bestRoute(HOME, naive);
+    let asGiven = 0;
+    let cursor = HOME;
+    for (const stop of naive) {
+      asGiven += roadMiles(cursor, stop.at);
+      cursor = stop.at;
+    }
+    asGiven += roadMiles(cursor, HOME);
+    expect(best.miles).toBeLessThanOrEqual(asGiven);
+    expect(best.order).toHaveLength(3);
+  });
+
+  test('adding a stop never shortens the trip', () => {
+    const oneStop = bestRoute(HOME, [SMITHS]).miles;
+    const twoStops = bestRoute(HOME, [SMITHS, WINCO]).miles;
+    expect(twoStops).toBeGreaterThan(oneStop);
+  });
+
+  test('fuel cost scales with distance and inversely with mpg', () => {
+    // 25 miles at 25 mpg and $3.49/gal is one gallon: $3.49.
+    expect(fuelCostCents(25, { mpg: 25, fuelPriceCents: 349 })).toBe(349);
+    // Double the efficiency, half the cost.
+    expect(fuelCostCents(25, { mpg: 50, fuelPriceCents: 349 })).toBe(175);
+    // Guards divide-by-zero instead of returning Infinity.
+    expect(fuelCostCents(25, { mpg: 0, fuelPriceCents: 349 })).toBe(0);
+  });
+
+  test('net saving subtracts the EXTRA fuel, not the whole trip', () => {
+    // A $6.13 grocery saving, where the detour adds $1.80 of fuel.
+    const result = netSaving(613, 200, 380);
+    expect(result.extraFuelCents).toBe(180);
+    expect(result.netSavingsCents).toBe(433);
+    expect(result.worthIt).toBe(true);
+  });
+
+  test('a saving smaller than the detour is correctly NOT worth it', () => {
+    // This is the case the ladder previously got wrong by ignoring fuel: 70c
+    // of groceries saved for $2.50 of extra driving.
+    const result = netSaving(70, 200, 450);
+    expect(result.extraFuelCents).toBe(250);
+    expect(result.netSavingsCents).toBe(-180);
+    expect(result.worthIt).toBe(false);
+  });
+
+  test('every real store has plausible Salt Lake Valley coordinates', () => {
+    for (const store of STORES) {
+      expect(store.lat).toBeGreaterThan(40.4);
+      expect(store.lat).toBeLessThan(40.9);
+      expect(store.lon).toBeGreaterThan(-112.2);
+      expect(store.lon).toBeLessThan(-111.7);
+    }
   });
 });

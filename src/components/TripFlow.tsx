@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowRight, Car, Check, ClipboardCopy, ExternalLink, Loader2, MapPin, ShoppingCart, TriangleAlert } from 'lucide-react';
 import { clsx } from 'clsx';
 import { priceMyListAction, pushKrogerCartAction } from '@/app/actions';
@@ -105,8 +106,17 @@ export function TripFlow({ view }: { view: TripView }) {
           <Panel>
             <PanelHeader
               title="Pick your trip"
-              hint="Every total buys your complete list. A cheaper option just costs you more stops."
+              hint={`Every total buys your complete list. Savings are shown net of fuel at ${view.settings.mpg} mpg and $${(view.settings.fuelPriceCents / 100).toFixed(2)}/gal.`}
             />
+            {!view.settings.homeIsSet && (
+              <p className="border-b border-line bg-raised/40 px-5 py-2.5 text-[11px] leading-relaxed text-zinc-500">
+                Distances are measured from a default downtown position because you haven&rsquo;t set your home yet, so
+                the fuel figures are indicative rather than yours.{' '}
+                <Link href="/stores" className="text-accent hover:text-emerald-300">
+                  Set home and vehicle
+                </Link>
+              </p>
+            )}
             <ul className="divide-y divide-line">
               {view.options.map((option) => (
                 <li key={option.id}>
@@ -136,9 +146,23 @@ export function TripFlow({ view }: { view: TripView }) {
                             Recommended
                           </span>
                         )}
+                        {/* Net of fuel is the number that answers "is the
+                            detour worth it". A plan can save on groceries and
+                            still lose once the driving is paid for. */}
                         {option.savingsCents > 0 && (
-                          <span className="text-[12px] font-semibold text-accent tnum">
-                            saves <Money cents={option.savingsCents} />
+                          <span
+                            className={clsx(
+                              'text-[12px] font-semibold tnum',
+                              option.worthIt ? 'text-accent' : 'text-amber-300',
+                            )}
+                          >
+                            {option.worthIt ? 'nets ' : 'loses '}
+                            <Money cents={Math.abs(option.netSavingsCents)} />
+                            {option.extraFuelCents > 0 && (
+                              <span className="ml-1 font-normal text-zinc-500">
+                                (<Money cents={option.savingsCents} /> − <Money cents={option.extraFuelCents} /> fuel)
+                              </span>
+                            )}
                           </span>
                         )}
                       </span>
@@ -149,7 +173,7 @@ export function TripFlow({ view }: { view: TripView }) {
                         </span>
                         <span className="inline-flex items-center gap-1 tnum">
                           <Car className="size-3" aria-hidden />
-                          {option.driveMinutes} min
+                          {option.miles.toFixed(1)} mi · <Money cents={option.fuelCents} /> fuel
                         </span>
                         {option.unavailable.length > 0 && (
                           <span className="inline-flex items-center gap-1 text-rose-300/80">
